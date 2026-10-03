@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.zip
+.env
+.env.*
+!.env.example
+.DS_Store
+src/typesafe-config.local.js

@@ -1,0 +1,15 @@
+{
+  "name": "valuable-bot-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A no-build Chrome Manifest V3 extension.",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node scripts/test.mjs",
+    "test:browser": "node scripts/test-browser.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

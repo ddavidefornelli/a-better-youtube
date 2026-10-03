@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Valuable Bot",
+  "version": "0.1.0",
+  "description": "Read YouTube videos and classify their learning value with TypeSafe AI.",
+  "minimum_chrome_version": "120",
+  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "host_permissions": ["https://api.typesafe.ai/*", "https://www.youtube.com/*", "https://youtube.com/*", "https://m.youtube.com/*"],
+  "content_scripts": [{
+    "matches": ["https://www.youtube.com/*", "https://youtube.com/*", "https://m.youtube.com/*"],
+    "js": ["src/feed-observer.js"],
+    "run_at": "document_start"
+  }],
+  "action": {
+    "default_title": "Valuable Bot",
+    "default_popup": "src/popup/popup.html"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  }
+}
