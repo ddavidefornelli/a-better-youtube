@@ -58,6 +58,10 @@ read(doc, { labels: badLabels });
 assert.equal(fixtures[2].root.getAttribute("data-valuable-bot-hidden"), null, "Marking remains the default");
 const hidePage = read(doc, { hideBad: true });
 assert.equal(hidePage.hiddenCount, 2);
+assert.equal(doc.body.querySelectorAll("[data-valuable-bot-label]").length, 0, "Filtering removes GOOD/BAD title labels and thumbnail badges, including the watch title");
+assert.equal(read(doc, { labels }).labeledCount, 0, "Filtering does not mark incoming decisions");
+assert.equal(doc.body.querySelectorAll("[data-valuable-bot-label]").length, 0);
+read(doc, { labels: badLabels });
 assert.equal(hidePage.videos.length, page.videos.length, "Hidden videos remain in the classified index");
 assert.equal(fixtures[2].root.getAttribute("data-valuable-bot-hidden"), "");
 assert.equal(fixtures[4].root.getAttribute("data-valuable-bot-hidden"), "", "Unknown single-video containers can be filtered too");
@@ -67,6 +71,8 @@ assert.equal(doc.body.getAttribute("data-valuable-bot-hidden"), null);
 assert.equal(read(doc, { hideBad: false }).hiddenCount, 0);
 assert.equal(fixtures[2].root.getAttribute("data-valuable-bot-hidden"), null);
 assert.equal(fixtures[4].root.getAttribute("data-valuable-bot-hidden"), null);
+assert.ok(fixtures.every(labeled), "Disabling filtering restores cached title labels");
+assert.ok(fixtures.every((entry) => entry.thumbnail.querySelector("[data-valuable-bot-thumbnail]")), "Disabling filtering restores thumbnail badges");
 read(doc, { labels });
 
 // Incremental recycling, duration changes, removed nodes, and same-input new cards.
@@ -152,6 +158,22 @@ assert.ok(labeled(duplicate));
   runTick(); assert.equal(notifications, 5, "Interleaved label writes cannot swallow new-card notifications");
 }
 
+// Fresh opted-out tabs suppress bootstrap messages until a reader is installed.
+{
+  const source = await readFile(new URL("../src/feed-observer.js", import.meta.url), "utf8");
+  const quiet = new Document();
+  let onMutation;
+  let notifications = 0;
+  const context = vm.createContext({ document: quiet,
+    MutationObserver: class { constructor(fn) { onMutation = fn; } observe() {} },
+    setTimeout() { assert.fail("Opted-out bootstrap/noise must not schedule refreshes"); },
+    browser: { runtime: { sendMessage: async () => { notifications++; return { ok: true, idle: true }; } } },
+  });
+  vm.runInContext(source, context); await pause();
+  for (let i = 0; i < 100; i++) onMutation([mutation(quiet.body)]);
+  assert.equal(notifications, 1, "Only one bootstrap message while opted out");
+}
+
 // Chrome mocks, with real change events and document-isolated persistent state.
 const saved = { typesafeApiKey: "test-secret" };
 const preferences = { autoClassify: false };
@@ -205,7 +227,7 @@ const chrome = {
     stats.injections.push({ tabId: target.tabId, files, options: args[0] });
     if (files) { assert.deepEqual(files, ["src/feed-observer.js"]); tab.doc.observing = true; return []; }
     assert.equal(func, processYouTubePage);
-    return [{ result: structuredClone(inDocument(tab.doc, () => func(...args))), documentId: `document-${target.tabId}` }];
+    return [{ result: structuredClone(inDocument(tab.doc, () => func(...args))), documentId: `document-${target.tabId}-${tab.doc.identity}` }];
   } },
 };
 globalThis.chrome = chrome;
@@ -407,8 +429,25 @@ assert.ok(background.htmlReads > htmlReads);
 popupPort.onDisconnect.emit(); await pause(); assert.equal(background.reader.watchHtml, false);
 const late = card("Popup confidence", "confidence"); background.body.append(late.root);
 invalidate(background, [mutation(background.body, "childList", { addedNodes: [late.root] })]);
-await send({ type: "YOUTUBE_FEED_CHANGED" }, feedSender); await until(() => labeled(late));
+await send({ type: "YOUTUBE_FEED_CHANGED" }, feedSender); await until(() => read(background).decisions.some((entry) => entry.title === "Popup confidence"));
+assert.equal(labeled(late), false, "Filtering keeps newly classified cards unmarked");
 assert.ok((await send({ type: "READ_YOUTUBE_PAGE" })).page.decisions.some((entry) => entry.title === "Popup confidence" && entry.confidence === 0.9));
+
+// Same-URL reloads reapply cached labels/filtering without new paid requests.
+const reloadRequests = stats.requests.length;
+const reloaded = new Document(background.url);
+const reloadCards = read(background).videos.map((video) => card(video.title, new URL(video.url).searchParams.get("v"), video.duration));
+reloaded.body.append(...reloadCards.map((entry) => entry.root));
+openTabs.set(1, { doc: reloaded, discarded: false });
+chrome.tabs.onUpdated.emit(1, { status: "complete" }, { url: reloaded.url });
+await until(() => read(reloaded).decisions.length === reloadCards.length);
+assert.equal(stats.requests.length, reloadRequests, "Identical reloaded cards reuse decisions without new requests");
+assert.ok(reloadCards.every((entry) => !labeled(entry)), "Reloaded cards stay unmarked while filtering");
+const reloadDecisions = read(reloaded).decisions;
+assert.ok(reloadDecisions.some((entry) => entry.label === "bad"));
+assert.ok(reloadCards.every((entry, index) => (entry.root.getAttribute("data-valuable-bot-hidden") === "") === (reloadDecisions[index].label === "bad")));
+openTabs.set(1, { doc: background, discarded: false });
+await send({ type: "YOUTUBE_FEED_CHANGED" }, feedSender);
 
 // Errors disable paid work once; opt-out survives a session reset/restart.
 statusCode = 429;

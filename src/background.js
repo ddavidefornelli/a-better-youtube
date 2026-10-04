@@ -66,6 +66,10 @@ async function readTab(state, { includeHtml = false, force = false } = {}) {
     await browser.scripting.executeScript({ target: { tabId: state.id }, files: ["src/feed-observer.js"] });
   }
   const previous = state.page;
+  // A reload can have the exact same URL/videos but a fresh DOM with no labels.
+  // Reuse decisions, not the old document's 'already classified' scan marker.
+  if (state.documentId !== read.documentId) state.classifiedSignature = null;
+  state.documentId = read.documentId;
   // Large HTML snapshots belong only to the requesting popup, not the worker.
   const { html: _html, ...metadata } = page;
   state.page = metadata;
@@ -295,7 +299,7 @@ function handleMessage(message, sender) {
     if (message?.type !== "YOUTUBE_FEED_CHANGED" || sender.frameId !== 0 || !isYouTube(sender.url)) return;
     return automaticEnabled().then((enabled) => {
       if (enabled || [...popups.values()].some((watch) => watch.tabId === sender.tab.id)) return scanTab(sender.tab.id).then(() => ({ ok: true }));
-      return { ok: true };
+      return { ok: true, idle: true };
     });
   }
   if (message?.type === "GET_STATUS") return status();

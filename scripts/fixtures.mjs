@@ -79,7 +79,9 @@ export class Element {
     return copy;
   }
 }
+let documents = 0;
 export class Document extends Element {
+  identity = ++documents;
   nodeType = 9;
   queries = [];
   htmlReads = 0;

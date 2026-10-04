@@ -6,12 +6,18 @@
   let timer = null;
   let forceSignal = false;
   let htmlChanged = false;
+  let dormant = false;
   let notifiedVersion = globalThis.__valuableBotPageReader?.version;
   const sendChange = () => {
     notifiedVersion = globalThis.__valuableBotPageReader?.version;
-    browser.runtime.sendMessage({ type: "YOUTUBE_FEED_CHANGED" }).catch(() => {});
+    browser.runtime.sendMessage({ type: "YOUTUBE_FEED_CHANGED" }).then((response) => {
+      dormant = response?.idle === true;
+    }).catch(() => {});
   };
   const notify = (force = false) => {
+    // An opted-out fresh tab has no index yet. Stop bootstrap/noise messages;
+    // enabling automatic mode installs its index and resumes this same observer.
+    if (dormant && !globalThis.__valuableBotPageReader) return;
     forceSignal ||= force;
     // Coalesce only the current DOM burst, not a trailing debounce. New cards
     // never wait for a quiet feed, an earlier API request, or a periodic timer.

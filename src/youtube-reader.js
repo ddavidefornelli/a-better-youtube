@@ -199,12 +199,12 @@ export function processYouTubePage(options = {}) {
           let marker = element.querySelector("[data-valuable-bot-label]");
           const validVideo = video && entry.title === video.title;
           const valid = validVideo && decision;
-          if (marker && (!validVideo || marker.getAttribute("data-video-url") !== url
+          if (marker && (reader.hideBad || !validVideo || marker.getAttribute("data-video-url") !== url
               || marker.getAttribute("data-video-title") !== video.title
               || marker.getAttribute("data-video-duration") !== (video.duration || ""))) {
             marker.remove(); marker = null; changed = true;
           }
-          if (!valid) continue;
+          if (reader.hideBad || !valid) continue;
           const text = `[${decision.label.toUpperCase()}] `;
           if (marker?.textContent !== text) {
             marker ||= document.createElement("span");
@@ -223,12 +223,12 @@ export function processYouTubePage(options = {}) {
         }
         for (const link of thumbnailIndex.get(url) || []) {
           let badge = link.querySelector("[data-valuable-bot-thumbnail]");
-          if (badge && (!video || badge.getAttribute("data-video-url") !== url
+          if (badge && (reader.hideBad || !video || badge.getAttribute("data-video-url") !== url
               || badge.getAttribute("data-video-title") !== video.title
               || badge.getAttribute("data-video-duration") !== (video.duration || ""))) {
             badge.remove(); badge = null; changed = true;
           }
-          if (!decision || badge?.getAttribute("data-decision") === decision.label) continue;
+          if (reader.hideBad || !decision || badge?.getAttribute("data-decision") === decision.label) continue;
           badge ||= document.createElement("span");
           badge.setAttribute("data-valuable-bot-label", "");
           badge.setAttribute("data-valuable-bot-thumbnail", "");
@@ -328,7 +328,7 @@ export function processYouTubePage(options = {}) {
         const visibilityChanged = hideBad !== undefined && reader.hideBad !== hideBad;
         if (hideBad !== undefined) reader.hideBad = hideBad;
         reader.flush(force);
-        if (visibilityChanged) updateVisibility(byUrl.keys());
+        if (visibilityChanged) apply(new Set(byUrl.keys()));
         if (clearDecisions) { decisions.clear(); version++; updateVisibility(byUrl.keys()); }
         let labeledCount = 0;
         if (labels) {

@@ -33,13 +33,15 @@ try {
   assert(page.videos.length === 60, "All native cards are extracted");
   const labels = page.videos.map((video, index) => ({ ...video, label: index % 2 ? "bad" : "good", confidence: 0.9 }));
   const beforeLabels = queries;
-  read({ labels, hideBad: true, includeHtml: false });
+  const filtered = read({ labels, hideBad: true, includeHtml: false });
+  assert(filtered.labeledCount === 0, "Filtering does not mark incoming decisions");
   assert(queries === beforeLabels, "Labels must not rescan the native document");
   const roots = [...document.body.children].filter((node) => node.matches("ytd-rich-item-renderer"));
   assert(roots.every((root, index) => (getComputedStyle(root).display === "none") === !!(index % 2)), "BAD cards collapse whole grid slots; GOOD cards stay visible");
-  assert(document.body.querySelectorAll("[data-valuable-bot-thumbnail]").length === 60, "All native thumbnails are still labeled");
+  assert(document.body.querySelectorAll("[data-valuable-bot-label]").length === 0, "Filtering adds no title labels or thumbnail badges");
   read({ hideBad: false, includeHtml: false });
   assert(roots.every((root) => getComputedStyle(root).display !== "none"), "Disabling restores every card");
+  assert(document.body.querySelectorAll("[data-valuable-bot-thumbnail]").length === 60, "Disabling restores cached thumbnail badges");
   const beforeReads = queries;
   for (let index = 0; index < 100; index++) read({ includeHtml: false });
   assert(queries === beforeReads, "100 unchanged snapshots perform zero document queries");
@@ -53,6 +55,7 @@ try {
   read({ labels, includeHtml: false }); await tick();
   assert(notifications === initialNotifications, "Our labels do not trigger native MutationObserver feedback");
   read({ hideBad: true, includeHtml: false }); await tick();
+  assert(document.body.querySelectorAll("[data-valuable-bot-label]").length === 0, "Enabling filtering removes existing labels and badges");
   const cloned = roots[1].cloneNode(true);
   cloned.querySelector("#video-title").textContent = "Brand new title";
   for (const link of cloned.querySelectorAll("a[href]")) link.href = "https://www.youtube.com/watch?v=cloned";
@@ -64,6 +67,7 @@ try {
   read({ labels: [{ ...newVideo, label: "bad", confidence: 0.9 }], includeHtml: false });
   assert(queries === beforeNewLabel, "Individual native decisions use the URL index");
   assert(getComputedStyle(cloned).display === "none", "New BAD results are hidden immediately");
+  assert(document.body.querySelectorAll("[data-valuable-bot-label]").length === 0, "New decisions remain unmarked while filtering");
   const clockNotifications = notifications;
   read({ watchHtml: true, includeHtml: false }); noise.style.color = "blue"; await tick();
   assert(notifications > clockNotifications, "Live HTML still tracks non-video attribute changes");
